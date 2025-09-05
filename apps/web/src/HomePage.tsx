@@ -1,4 +1,3 @@
-import routeraccoon from './assets/routeraccoon.png';
 import { Box, Button, Card, CardContent, Chip, Container, IconButton, Stack, Typography } from '@mui/material';
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
@@ -11,7 +10,7 @@ export default function HomePage() {
   return (
     <Container maxWidth="sm" sx={{ py: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-        <Box component="img" src={routeraccoon} alt="Route Raccoon logo" sx={{ height: 120, borderRadius:2 }} />
+        <Box component="img" src={`/routeraccoon.png`} alt="Route Raccoon logo" sx={{ height: 120, borderRadius:2 }} />
       </Box>
       <Typography variant="h3" sx={{fontFamily: 'Doto'}} align="center" gutterBottom>
         Route Raccoon
