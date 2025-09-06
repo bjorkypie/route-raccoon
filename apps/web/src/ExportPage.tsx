@@ -208,7 +208,7 @@ export default function ExportPage() {
                 target="_blank"
                 size="large"
             >
-            Be a Waymaker!
+            Log your Miles 🏃‍♀️🚶🚴
             </Button>
             </CardContent>
         </Card>
