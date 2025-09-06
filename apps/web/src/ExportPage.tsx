@@ -11,6 +11,7 @@ import {
   Checkbox,
   Container,
   FormControlLabel,
+  IconButton,
   Stack,
   TextField,
   Typography,
@@ -106,9 +107,9 @@ export default function ExportPage() {
                 <Typography>
                     Sign in to connect your Strava account and export activities.
                 </Typography>
-                <Button variant="contained" color="primary" onClick={login}>
-                    Sign in with Strava
-                </Button>
+                 <IconButton onClick={login} aria-label="Log in with Strava" sx={{ p: 0, borderRadius: 0 }}>
+                    <img src="/btn_strava_connect_with_orange.png" alt="Strava login"/>
+                </IconButton>
                 </Stack>
             </CardContent>
             </Card>
