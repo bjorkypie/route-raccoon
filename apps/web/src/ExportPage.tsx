@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
+    Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -13,6 +16,8 @@ import {
   Typography,
 } from '@mui/material';
 import Loading from './Loading';
+import ExpandCircleDownIcon from '@mui/icons-material/ExpandCircleDown';
+
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
 
@@ -24,7 +29,8 @@ export default function ExportPage() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [includeOnlyMileage, setIncludeOnlyMileage] = useState(false);
-
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     useEffect(() => {
         const exp = localStorage.getItem('expiresAt');
         if (exp) {
@@ -91,7 +97,7 @@ export default function ExportPage() {
     return (
         <Container maxWidth="sm" sx={{ py: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
-            Strava Export
+            Strava Stash 🦝
         </Typography>
         {!athleteId ? (
             <Card>
@@ -111,13 +117,13 @@ export default function ExportPage() {
             <CardContent>
                 <Stack spacing={2}>
                 <Typography variant="body2" color="text.secondary" sx={{pl:1}}>
-                    Signed in as athlete <Box component="span" sx={{ fontFamily: 'monospace' }}>{athleteId}</Box>
+                    Signed in as athlete <Box component="span" sx={{ fontFamily: 'monospace' }}>{athleteId}</Box> 🐾
 
                 </Typography>
                 {error && <Alert severity="error">{error}</Alert>}
                 {error && <Button variant="contained" color="warning" sx={{color: 'text.secondary'}} onClick={login}>Try logging in again?</Button>}
                 <TextField
-                    label="Start date"
+                    label="Start digging from"
                     type="date"
                     value={start}
                     onChange={(e) => setStart(e.target.value)}
@@ -125,7 +131,7 @@ export default function ExportPage() {
                     error={start > new Date().toISOString().slice(0, 10)}
                 />
                 <TextField
-                    label="End date"
+                    label="Stop digging at"
                     type="date"
                     value={end}
                     onChange={(e) => setEnd(e.target.value)}
@@ -137,7 +143,7 @@ export default function ExportPage() {
                     <FormControlLabel 
                         control={<Checkbox checked={includeOnlyMileage} size="small" color="secondary"/>}
                         onChange={() => setIncludeOnlyMileage(!includeOnlyMileage)}
-                        label="Include only activities with mileage data"
+                        label="Include only activities with mileage (no strength, yoga, etc.)"
                         slotProps={{typography: {fontSize: '0.75rem'}}}
                         sx={{pl:1}}
                     />
@@ -153,7 +159,7 @@ export default function ExportPage() {
                     ) : (
                         <Stack sx={{pl:1}}>
                         <Typography variant="body2" color="text.secondary" sx={{fontStyle:'italic'}}>
-                        Exports may take a few minutes depending on the date range and the data source's API limits. Please be patient and avoid navigating away from this page.
+                        When rummaging through the data bins, big date ranges may take a few minutes — hold tight, and don’t wander off while we work.
                         </Typography>
                         </Stack>
                     )}
@@ -163,7 +169,49 @@ export default function ExportPage() {
             </CardContent>
             </Card>
         )}
-        
+         <Typography variant="h4" component="h1" gutterBottom sx={{mt:4}}>
+            Waymaker Challenge Upload
+        </Typography>
+        <Card>
+            <CardContent>
+            <Typography variant="body1" color="text.secondary" sx={{mb: 2}}>
+                We're doing the <a href="https://runsignup.com/Race/IL/Chicago/Waymakers" target="_blank">Waymaker Virtual Mileage Challenge</a>, and downloads are packed just how they like them. Join me and upload your miles here!
+            </Typography>
+            <Accordion sx={{mt:2}}>
+                <AccordionSummary expandIcon={<ExpandCircleDownIcon />  }>
+                    <Typography component="span" color="text.secondary" sx={{fontStyle:'italic', pl:1}}>
+                    (Optional) Enter your name to go straight to your registration lookup
+                </Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+            <Stack spacing={2} sx={{mt:2}}>
+                
+           <TextField 
+                label="First name"
+                size="small"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                
+            />
+            <TextField 
+                label="Last name"
+                size="small"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                />
+            </Stack>
+            </AccordionDetails>
+            </Accordion>
+            <Button variant="contained" color="primary" 
+                href={`https://runsignup.com/Race/RegistrationLookup/?raceId=132916${firstName && `&firstName=${firstName}`}${lastName && `&lastName=${lastName}`}${firstName !== "" && lastName !== "" ? "&q=": ""}`}
+                sx={{mt:2}} 
+                target="_blank"
+                size="large"
+            >
+            Be a Waymaker!
+            </Button>
+            </CardContent>
+        </Card>
         </Container>
     );
 }
