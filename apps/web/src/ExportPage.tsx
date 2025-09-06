@@ -175,7 +175,7 @@ export default function ExportPage() {
         <Card>
             <CardContent>
             <Typography variant="body1" color="text.secondary" sx={{mb: 2}}>
-                We're doing the <a href="https://runsignup.com/Race/IL/Chicago/Waymakers" target="_blank">Waymaker Virtual Mileage Challenge</a>, and downloads are packed just how they like them. Join me and upload your miles here!
+                We're doing the <a href="https://runsignup.com/Race/IL/Chicago/Waymakers" target="_blank">Waymaker Virtual Mileage Challenge</a>, and our mileage csv downloads are packed just how they like them. Join the challenge and upload your miles here!
             </Typography>
             <Accordion sx={{mt:2}}>
                 <AccordionSummary expandIcon={<ExpandCircleDownIcon />  }>
