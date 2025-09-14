@@ -24,7 +24,7 @@ import ExpandCircleDownIcon from '@mui/icons-material/ExpandCircleDown';
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
 
 export default function ExportPage() {
-    const { athleteId, login } = useAthleteAuth();
+    const { athleteId, login, clearAuth } = useAthleteAuth();
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
     const [busy, setBusy] = useState(false);
@@ -99,14 +99,16 @@ export default function ExportPage() {
                 </Stack>
             </CardContent>
             </Card>
-        ) : (
+         ) : (
             <Card>
             <CardContent>
                 <Stack spacing={2}>
-                <Typography variant="body2" color="text.secondary" sx={{pl:1}}>
-                    Signed in as athlete <Box component="span" sx={{ fontFamily: 'monospace' }}>{athleteId}</Box> 🐾
-
-                </Typography>
+                                <Stack direction="row" spacing={1} alignItems="center" sx={{pl:1}}>
+                                    <Typography variant="body2" color="text.secondary">
+                                            Signed in as <Box component="span" sx={{ fontFamily: 'monospace' }}>{athleteId}</Box> 🐾
+                                    </Typography>
+                                    <Button size="small" variant="contained" color="warning" onClick={clearAuth}>Logout</Button>
+                                </Stack>
                 {error && <Alert severity="error">{error}</Alert>}
                 {error && <Button variant="contained" color="warning" sx={{color: 'text.secondary'}} onClick={login}>Try logging in again?</Button>}
                 <TextField
@@ -155,7 +157,8 @@ export default function ExportPage() {
                 </Stack>
             </CardContent>
             </Card>
-        )}
+         )}
+        
          <Typography variant="h4" component="h1" gutterBottom sx={{mt:4}}>
             Waymaker Challenge Upload
         </Typography>

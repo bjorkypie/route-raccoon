@@ -2,7 +2,7 @@ import { Box, Button, Card, CardContent, Chip, Container, IconButton, Stack, Typ
 import { useAthleteAuth } from './hooks/useAthleteAuth';
 
 export default function HomePage() {
-  const { athleteId, login } = useAthleteAuth();
+  const { athleteId, login, clearAuth } = useAthleteAuth();
 
   return (
     <Container maxWidth="sm" sx={{ py: 4 }}>
@@ -26,9 +26,14 @@ export default function HomePage() {
           <img src="/btn_strava_connect_with_orange.png" alt="Strava login"/>
           </IconButton>
         ) : (
-          <Button variant="contained" color="primary" href="/export">
-            Go to Export
-          </Button>
+          <Stack direction="row" spacing={2}>
+            <Button variant="contained" color="primary" href="/export">
+              Go to Export
+            </Button>
+            <Button variant="outlined" color="secondary" onClick={clearAuth}>
+              Logout
+            </Button>
+          </Stack>
         )}
       </Stack>
     </Container>
