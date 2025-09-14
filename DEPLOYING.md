@@ -31,6 +31,7 @@ Part 1 — Deploy the API to Heroku (from local)
    - `heroku config:set STRAVA_CLIENT_ID=your-id -a your-api-app`
    - `heroku config:set STRAVA_CLIENT_SECRET=your-secret -a your-api-app`
    - `heroku config:set STRAVA_REDIRECT_URI=https://your-api-app.herokuapp.com/api/auth/callback -a your-api-app`
+      - `heroku config:set STRAVA_WEBHOOK_VERIFY_TOKEN=some-random-string -a your-api-app`
    - For initial testing with local web: `heroku config:set FRONTEND_ORIGIN=http://localhost:5173 -a your-api-app`
 
 4) Deploy
@@ -79,6 +80,25 @@ Finish — Connect Both Ends
 3) Test end-to-end
    - Open your Netlify site → Sign in with Strava → return to app
    - Export a date range; a ZIP should download.
+
+4) (Optional but recommended) Create Strava Webhook Subscription
+    - Ensure your deployed API is reachable at `https://your-api-app.herokuapp.com/api/strava/webhook`.
+    - Create subscription:
+       ```bash
+       curl -X POST https://www.strava.com/api/v3/push_subscriptions \
+          -F client_id=$STRAVA_CLIENT_ID \
+          -F client_secret=$STRAVA_CLIENT_SECRET \
+          -F callback_url=https://your-api-app.herokuapp.com/api/strava/webhook \
+          -F verify_token=$STRAVA_WEBHOOK_VERIFY_TOKEN
+       ```
+    - The API will answer the validation GET automatically.
+    - Verify subscription exists:
+       ```bash
+       curl -G https://www.strava.com/api/v3/push_subscriptions \
+          -d client_id=$STRAVA_CLIENT_ID \
+          -d client_secret=$STRAVA_CLIENT_SECRET
+       ```
+    - See `apps/api/WEBHOOKS.md` for details.
 
 Local Development
 - Start both apps: `npm run dev` (root script runs API and Web)

@@ -40,11 +40,15 @@ const API = 'https://www.strava.com/api/v3';
 const CLIENT_ID = (process.env.STRAVA_CLIENT_ID || '').trim();
 const CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET!;
 const REDIRECT_URI = process.env.STRAVA_REDIRECT_URI!;
+const WEBHOOK_VERIFY_TOKEN = (process.env.STRAVA_WEBHOOK_VERIFY_TOKEN || '').trim();
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 
 if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
   console.error('Missing env. Expected STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_REDIRECT_URI in apps/api/.env');
   process.exit(1);
+}
+if (!WEBHOOK_VERIFY_TOKEN) {
+  console.warn('[warn] STRAVA_WEBHOOK_VERIFY_TOKEN not set. Webhook validation will fail until this is configured.');
 }
 
 const PORT = Number(process.env.PORT || 8787);
@@ -221,6 +225,117 @@ app.post('/api/export/csv', async (req, res) => {
 
 // ---- export: GPX (zip) ----
 // download streams and convert to GPX
+
+// ---- Strava Webhook Endpoint ----
+// Validation (GET) + Event ingestion (POST)
+// Docs: https://developers.strava.com/docs/webhooks/
+// Subscription creation requires your server to answer the validation GET within 2s with JSON { "hub.challenge": "..." }
+
+type StravaWebhookEvent = {
+  object_type: 'activity' | 'athlete';
+  object_id: number;
+  aspect_type: 'create' | 'update' | 'delete';
+  updates?: Record<string, any>;
+  owner_id: number;
+  subscription_id: number;
+  event_time: number; // epoch seconds
+};
+
+// simple ring buffer for recent events (debug / future processing)
+const recentEvents: StravaWebhookEvent[] = [];
+const pushEvent = (e: StravaWebhookEvent) => {
+  recentEvents.push(e);
+  while (recentEvents.length > 100) recentEvents.shift();
+};
+
+// simple activity cache (per athlete -> map of activity id -> summary)
+const activityCache = new Map<string, Map<number, any>>();
+
+async function fetchAndCacheActivity(athleteId: string, activityId: number) {
+  try {
+    const token = await withFreshToken(athleteId);
+    const { data } = await axios.get(`${API}/activities/${activityId}`, {
+      headers: { Authorization: `Bearer ${token.access_token}` },
+      params: { include_all_efforts: false },
+    });
+    let athleteMap = activityCache.get(athleteId);
+    if (!athleteMap) { athleteMap = new Map(); activityCache.set(athleteId, athleteMap); }
+    athleteMap.set(activityId, data);
+    // keep only 50 recent cached per athlete
+    if (athleteMap.size > 50) {
+      const iter = athleteMap.keys().next();
+      if (!iter.done) athleteMap.delete(iter.value);
+    }
+    console.log(`Cached activity ${activityId} for athlete ${athleteId} (type=${data?.type}, private=${data?.private})`);
+  } catch (err: any) {
+    // Common cases: activity deleted, privacy changed so we lost access, rate limit.
+    console.warn(`Failed to fetch activity ${activityId} for athlete ${athleteId}: ${err?.response?.status || ''} ${err?.message}`);
+  }
+}
+
+// GET validation
+app.get('/api/strava/webhook', (req, res) => {
+  const mode = String(req.query['hub.mode'] || '');
+  const challenge = String(req.query['hub.challenge'] || '');
+  const verify = String(req.query['hub.verify_token'] || '');
+  if (mode !== 'subscribe') return res.status(400).json({ error: 'invalid_mode' });
+  if (!WEBHOOK_VERIFY_TOKEN || verify !== WEBHOOK_VERIFY_TOKEN) {
+    return res.status(403).json({ error: 'verify_token_mismatch' });
+  }
+  if (!challenge) return res.status(400).json({ error: 'missing_challenge' });
+  return res.json({ 'hub.challenge': challenge });
+});
+
+// POST events
+app.post('/api/strava/webhook', (req, res) => {
+  const body = req.body as StravaWebhookEvent | undefined;
+  if (!body || !body.object_type || !body.aspect_type) {
+    // acknowledge anyway to stop retries; log for debugging
+    console.warn('Received malformed webhook event', body);
+    return res.status(200).json({ received: false });
+  }
+  try {
+    pushEvent(body);
+    // Handle deauthorization: athlete update with authorized=false
+    if (body.object_type === 'athlete' && body.aspect_type === 'update' && body.updates && body.updates.authorized === 'false') {
+      const key = String(body.object_id);
+      if (tokenStore.has(key)) {
+        tokenStore.delete(key);
+        console.log(`Webhook: athlete ${key} deauthorized app -> tokens purged`);
+      }
+    }
+    // For activity create/update/delete you might enqueue a fetch for details here.
+    if (body.object_type === 'activity') {
+      console.log(`Webhook activity event: ${body.aspect_type} id=${body.object_id} owner=${body.owner_id}`);
+      const athleteId = String(body.owner_id);
+      // privacy change signal (update with updates.private) when we have read_all scope
+      if (body.aspect_type === 'update' && body.updates && Object.prototype.hasOwnProperty.call(body.updates, 'private')) {
+        console.log(`Privacy change for activity ${body.object_id}: now private=${body.updates.private}`);
+      }
+      if (body.aspect_type === 'delete') {
+        const athleteMap = activityCache.get(athleteId);
+        if (athleteMap && athleteMap.has(body.object_id)) {
+          athleteMap.delete(body.object_id);
+          console.log(`Removed cached activity ${body.object_id} after delete event.`);
+        }
+      } else if (body.aspect_type === 'create' || body.aspect_type === 'update') {
+        // fetch asynchronously (non-blocking)
+        setImmediate(() => fetchAndCacheActivity(athleteId, body.object_id));
+      }
+    }
+  } catch (err) {
+    console.error('Error processing webhook event', err);
+  }
+  // Must respond within 2s regardless of processing outcome.
+  return res.status(200).json({ received: true });
+});
+
+// (Optional) debug endpoint (disable or protect in production)
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/api/strava/webhook/events', (_req, res) => {
+    res.json({ events: recentEvents });
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
