@@ -56,6 +56,19 @@ const PORT = Number(process.env.PORT || 8787);
 // ---- health ----
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
 
+// ---- auth: status ----
+// Lightweight check used by frontend to verify a locally stored athleteId is still valid.
+// Returns { authenticated: boolean, expiresAt?: number }
+app.get('/api/auth/status', (req, res) => {
+  const athleteId = String(req.query.athleteId || '').trim();
+  if (!athleteId) return res.json({ authenticated: false });
+  const t = tokenStore.get(athleteId);
+  if (!t) return res.json({ authenticated: false });
+  const now = Math.floor(Date.now() / 1000);
+  if (t.expires_at <= now) return res.json({ authenticated: false, expiresAt: t.expires_at });
+  return res.json({ authenticated: true, expiresAt: t.expires_at });
+});
+
 // ---- auth: login ----
 app.get('/api/auth/login', (_req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
