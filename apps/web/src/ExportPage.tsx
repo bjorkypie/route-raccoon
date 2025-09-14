@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAthleteAuth } from './hooks/useAthleteAuth';
 import {
     Accordion,
   AccordionDetails,
@@ -23,7 +24,7 @@ import ExpandCircleDownIcon from '@mui/icons-material/ExpandCircleDown';
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
 
 export default function ExportPage() {
-    const [athleteId, setAthleteId] = useState<string | null>(null);
+    const { athleteId, login } = useAthleteAuth();
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
     const [busy, setBusy] = useState(false);
@@ -32,21 +33,6 @@ export default function ExportPage() {
     const [includeOnlyMileage, setIncludeOnlyMileage] = useState(false);
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
-    useEffect(() => {
-        const exp = localStorage.getItem('expiresAt');
-        if (exp) {
-        const expNum = Number(exp);
-        if (!isNaN(expNum)) {
-            if (Date.now() >= expNum * 1000) {
-            setAthleteId(null);
-            localStorage.removeItem('athleteId');
-            localStorage.removeItem('expiresAt');
-            }
-        }
-        }
-    }, []);
- 
-    useEffect(() => setAthleteId(localStorage.getItem('athleteId')), []);
     useEffect(() => {if(error){console.log(error)}}, [error])
     useEffect(() => {
         if(!busy && !error){
@@ -57,7 +43,7 @@ export default function ExportPage() {
         }
     }, [busy])
     
-    const login = () => (window.location.href = `${API}/api/auth/login`);
+    // login provided by hook
     const exportOptions = {
         gpx: {
             path:`${API}/api/export/gpx`,

@@ -1,41 +1,8 @@
 import { Box, Button, Card, CardContent, Chip, Container, IconButton, Stack, Typography } from '@mui/material';
-
-const API = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
+import { useAthleteAuth } from './hooks/useAthleteAuth';
 
 export default function HomePage() {
-  const athleteId = typeof window !== 'undefined' ? localStorage.getItem('athleteId') : null;
-  // Derived flag: we will hide export button if expired or server says token invalid
-  const expired = (() => {
-    if (typeof window === 'undefined') return false;
-    const exp = localStorage.getItem('expiresAt');
-    if (!exp) return false;
-    const expNum = Number(exp);
-    return !isNaN(expNum) && Date.now() >= expNum * 1000;
-  })();
-
-  // If expired, clear immediately so UI shows login
-  if (expired && typeof window !== 'undefined') {
-    localStorage.removeItem('athleteId');
-    localStorage.removeItem('expiresAt');
-  }
-
-  // Optional server validation: if athleteId exists but server no longer has token (dyno restart), clear it.
-  if (athleteId && typeof window !== 'undefined' && !expired) {
-    // fire and forget; we avoid adding React state complexity here
-    fetch(`${API}/api/auth/status?athleteId=${encodeURIComponent(athleteId)}`)
-      .then(r => r.json())
-      .then(d => {
-        if (!d?.authenticated) {
-          localStorage.removeItem('athleteId');
-          localStorage.removeItem('expiresAt');
-          // force repaint by navigating to same route (cheap way w/out state)
-          window.requestAnimationFrame(() => window.dispatchEvent(new Event('storage')));
-        }
-      })
-      .catch(() => { /* ignore */ });
-  }
-
-  const login = () => (window.location.href = `${API}/api/auth/login`);
+  const { athleteId, login } = useAthleteAuth();
 
   return (
     <Container maxWidth="sm" sx={{ py: 4 }}>
