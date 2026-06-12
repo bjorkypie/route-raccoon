@@ -20,6 +20,41 @@ type TokenBundle = {
   athlete: { id: number; username?: string };
   scope?: string;
 };
+
+type StravaActivity = {
+  id: number;
+  name: string;
+  type: string;
+  sport_type?: string;
+  workout_type?: number | null;
+  distance: number;
+  moving_time: number;
+  start_date: string;
+  commute?: boolean;
+};
+
+type ExportRequestBody = {
+  athleteId: string;
+  startDate: string;
+  endDate: string;
+  includeOnlyMileage?: boolean;
+  commuteOnly?: boolean;
+  activityTypes?: string[];
+  includeTotalsRow?: boolean;
+};
+
+type ExportSummary = {
+  activityCount: number;
+  totalDistanceMiles: number;
+  totalMovingTimeSeconds: number;
+  totalsByType: Array<{
+    type: string;
+    activityCount: number;
+    totalDistanceMiles: number;
+    totalMovingTimeSeconds: number;
+  }>;
+};
+
 const tokenStore = new Map<string, TokenBundle>();
 const stateStore = new Set<string>(); // CSRF state for dev
 
@@ -136,91 +171,216 @@ async function withFreshToken(athleteId: string): Promise<TokenBundle> {
   return updated;
 }
 
-// ---- export: CSV summary (zip) ----
-app.post('/api/export/csv', async (req, res) => {
-  try {
-    const { athleteId, startDate, endDate, includeOnlyMileage } = req.body as {
-      athleteId: string;
-      startDate: string; // "YYYY-MM-DD"
-      endDate: string;   // "YYYY-MM-DD",
-      includeOnlyMileage?: boolean;
+const csvHeaders = [
+  'Activity ID',
+  'Comment',
+  'Activity Type',
+  'Strava Type',
+  'Sport Type',
+  'Workout Type',
+  'Commute',
+  'Activity Date',
+  'Activity Time',
+  'Distance in Miles',
+] as const;
+
+const milesFromMeters = (meters: number): number => Number((meters * 0.00062137).toFixed(2));
+
+const mapActivityType = (t: string) => {
+  if (t === 'Run' || t === 'VirtualRun') return 'Run';
+  if (
+    t === 'Ride' ||
+    t === 'EBikeRide' ||
+    t === 'VirtualRide' ||
+    t === 'Velomobile' ||
+    t === 'Wheelchair' ||
+    t === 'InlineSkate' ||
+    t === 'RollerSki' ||
+    t === 'Handcycle'
+  ) {
+    return 'Roll';
+  }
+  return 'Walk';
+};
+
+const secondsFormatted = (secs: number): string => {
+  const secondsInHour = 3600;
+  const secondsInMinute = 60;
+  const hours = Math.floor(secs / secondsInHour);
+  const remainingSeconds = secs % secondsInHour;
+  const minutes = Math.floor(remainingSeconds / secondsInMinute);
+  const seconds = remainingSeconds % secondsInMinute;
+  const formatter = (n: number) => n.toString().padStart(2, '0');
+
+  return `${formatter(hours)}:${formatter(minutes)}:${formatter(seconds)}`;
+};
+
+const csvEscape = (value: string | number): string => {
+  const stringValue = String(value ?? '');
+  if (!/[",\n]/.test(stringValue)) return stringValue;
+  return `"${stringValue.replace(/"/g, '""')}"`;
+};
+
+async function fetchActivitiesForExport(
+  athleteId: string,
+  startDate: string,
+  endDate: string,
+  includeOnlyMileage = false,
+  commuteOnly = false,
+  activityTypes: string[] = []
+): Promise<StravaActivity[]> {
+  const token = await withFreshToken(athleteId);
+  const after = dayjs.utc(startDate).startOf('day').unix();
+  const before = dayjs.utc(endDate).endOf('day').unix();
+  const selectedTypes = new Set(activityTypes.filter(Boolean));
+
+  let page = 1;
+  const activities: StravaActivity[] = [];
+  while (true) {
+    const { data, headers } = await axios.get(`${API}/athlete/activities`, {
+      headers: { Authorization: `Bearer ${token.access_token}` },
+      params: { after, before, per_page: 200, page },
+    });
+    if (!Array.isArray(data) || data.length === 0) break;
+
+    const filtered = data.filter((activity: StravaActivity) => {
+      if (includeOnlyMileage && activity.distance <= 0) return false;
+      if (commuteOnly && !activity.commute) return false;
+      if (selectedTypes.size > 0 && !selectedTypes.has(activity.type)) return false;
+      return true;
+    });
+
+    activities.push(...filtered);
+    page++;
+
+    const used = headers['x-ratelimit-usage'] || headers['x-readratelimit-usage'];
+    if (used) {
+      const [shortUsed] = String(used).split(',').map(Number);
+      if (shortUsed && shortUsed > 90) await new Promise(r => setTimeout(r, 1200));
+    }
+  }
+
+  return activities;
+}
+
+function buildExportSummary(activities: StravaActivity[]): ExportSummary {
+  const totals = new Map<string, ExportSummary['totalsByType'][number]>();
+
+  for (const activity of activities) {
+    const total = totals.get(activity.type) ?? {
+      type: activity.type,
+      activityCount: 0,
+      totalDistanceMiles: 0,
+      totalMovingTimeSeconds: 0,
     };
+    total.activityCount += 1;
+    total.totalDistanceMiles += milesFromMeters(activity.distance);
+    total.totalMovingTimeSeconds += activity.moving_time;
+    totals.set(activity.type, total);
+  }
+
+  const totalDistanceMiles = Number(
+    activities.reduce((sum, activity) => sum + milesFromMeters(activity.distance), 0).toFixed(2)
+  );
+  const totalMovingTimeSeconds = activities.reduce((sum, activity) => sum + activity.moving_time, 0);
+
+  return {
+    activityCount: activities.length,
+    totalDistanceMiles,
+    totalMovingTimeSeconds,
+    totalsByType: Array.from(totals.values())
+      .map(total => ({
+        ...total,
+        totalDistanceMiles: Number(total.totalDistanceMiles.toFixed(2)),
+      }))
+      .sort((left, right) => right.totalDistanceMiles - left.totalDistanceMiles),
+  };
+}
+
+function buildCsvRows(activities: StravaActivity[], includeTotalsRow = false) {
+  const rows = activities.map(activity => ({
+    'Activity ID': String(activity.id),
+    Comment: activity.name,
+    'Activity Type': mapActivityType(activity.type),
+    'Strava Type': activity.type,
+    'Sport Type': activity.sport_type ?? '',
+    'Workout Type': activity.workout_type ?? '',
+    Commute: activity.commute ? 'yes' : 'no',
+    'Activity Date': dayjs(activity.start_date).format('YYYY-MM-DD'),
+    'Activity Time': secondsFormatted(activity.moving_time),
+    'Distance in Miles': milesFromMeters(activity.distance),
+  }));
+
+  if (includeTotalsRow) {
+    const summary = buildExportSummary(activities);
+    rows.push({
+      'Activity ID': '',
+      Comment: 'TOTAL',
+      'Activity Type': `${summary.activityCount} activities`,
+      'Strava Type': '',
+      'Sport Type': '',
+      'Workout Type': '',
+      Commute: '',
+      'Activity Date': '',
+      'Activity Time': secondsFormatted(summary.totalMovingTimeSeconds),
+      'Distance in Miles': summary.totalDistanceMiles,
+    });
+  }
+
+  return rows;
+}
+
+function buildCsv(rows: ReturnType<typeof buildCsvRows>) {
+  return [
+    csvHeaders.join(','),
+    ...rows.map(row => csvHeaders.map(header => csvEscape(row[header])).join(',')),
+  ].join('\n');
+}
+
+app.post('/api/export/summary', async (req, res) => {
+  try {
+    const { athleteId, startDate, endDate, includeOnlyMileage, commuteOnly, activityTypes } = req.body as ExportRequestBody;
     if (!athleteId || !startDate || !endDate) {
       return res.status(400).json({ error: 'athleteId, startDate, endDate are required' });
     }
 
-    const token = await withFreshToken(athleteId);
-    const after = dayjs.utc(startDate).startOf('day').unix();
-    const before = dayjs.utc(endDate).endOf('day').unix();
+    const activities = await fetchActivitiesForExport(
+      athleteId,
+      startDate,
+      endDate,
+      includeOnlyMileage,
+      commuteOnly,
+      activityTypes
+    );
 
-    let page = 1;
-    const activities: any[] = [];
-    while (true) {
-      const { data, headers } = await axios.get(`${API}/athlete/activities`, {
-        headers: { Authorization: `Bearer ${token.access_token}` },
-        params: { after, before, per_page: 200, page },
-      });
-      if (!Array.isArray(data) || data.length === 0) break;
-      if(includeOnlyMileage){
-      //filter out activities with zero distance!
-        const distanceData = data.filter(a => a.distance > 0)
-        activities.push(...distanceData);
-      }else{
-        activities.push(...data)
-      }
-      
-      page++;
+    res.json({
+      startDate,
+      endDate,
+      summary: buildExportSummary(activities),
+    });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: err?.message || 'summary failed' });
+  }
+});
 
-      // gentle back-off if we're chewing the short window
-      const used = headers['x-ratelimit-usage'] || headers['x-readratelimit-usage'];
-      if (used) {
-        const [shortUsed] = String(used).split(',').map(Number);
-        if (shortUsed && shortUsed > 90) await new Promise(r => setTimeout(r, 1200));
-      }
+// ---- export: CSV summary (zip) ----
+app.post('/api/export/csv', async (req, res) => {
+  try {
+    const { athleteId, startDate, endDate, includeOnlyMileage, commuteOnly, activityTypes, includeTotalsRow } = req.body as ExportRequestBody;
+    if (!athleteId || !startDate || !endDate) {
+      return res.status(400).json({ error: 'athleteId, startDate, endDate are required' });
     }
 
-    // CSV Options
-    // map strava activity fields
-    // map apple activity fields
-    // map garmin activity fields
-    // map generic fields
-    // filter by type (run, ride, walk, etc)
-    // filter by distance (non-zero, min, max, etc)
-    // filter by time (moving time, elapsed time, etc)
-
-    const mapType = (t: string) => {
-        if (t === 'Run' || t === 'VirtualRun') return 'Run';
-        if (t === 'Ride' || t === 'EBikeRide' || t === 'VirtualRide' 
-            || t === 'Velomobile' || t === 'Wheelchair' || t === 'InlineSkate' 
-            || t === 'RollerSki' || t === 'Hnadcycle') return 'Roll';
-        return 'Walk';
-    }
-    
-    const secondsFormatted = (secs: number):string => {
-        const secondsInHour = 3600;
-        const secondsInMinute = 60
-        const hours = Math.floor(secs / secondsInHour);
-        const remainingSeconds = secs % secondsInHour;
-        const minutes = Math.floor(remainingSeconds / secondsInMinute);
-        const seconds = remainingSeconds % secondsInMinute;
-        const formatter = (n:number) => n.toString().padStart(2, '0');
-
-        return `${formatter(hours)}:${formatter(minutes)}:${formatter(seconds)}`;
-    }
-    // CSV
-    const rows = activities.map(a => ({
-      Comment: a.name,
-      'Activity Type': mapType(a.type),
-      'Activity Date': dayjs(a.start_date).format('YYYY-MM-DD'),
-      'Activity Time': secondsFormatted(a.moving_time), // seconds
-      'Distance in Miles': a.distance*0.00062137, // meters
-
-    }));
-    const header = Object.keys(rows[0] ?? { id: '', name: '' });
-    const csv = [
-      header.join(','),
-      ...rows.map(r => header.map(k => (r as any)[k]).join(',')),
-    ].join('\n');
+    const activities = await fetchActivitiesForExport(
+      athleteId,
+      startDate,
+      endDate,
+      includeOnlyMileage,
+      commuteOnly,
+      activityTypes
+    );
+    const csv = buildCsv(buildCsvRows(activities, includeTotalsRow));
 
     const zip = new JSZip();
     zip.file(`summary_${startDate}_${endDate}.csv`, csv);
