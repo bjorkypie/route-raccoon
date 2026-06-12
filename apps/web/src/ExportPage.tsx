@@ -19,11 +19,19 @@ import {
     TextField,
     Typography,
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
 import Loading from './Loading';
 import ExpandCircleDownIcon from '@mui/icons-material/ExpandCircleDown';
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
 const today = new Date().toISOString().slice(0, 10);
+const BRAND = {
+    tangelo: '#fb5012',
+    smokyBlack: '#0f0a0a',
+    isabelline: '#f5efed',
+    blueMunsell: '#2292a4',
+    citrine: '#bdbf09',
+} as const;
 
 const activityTypeOptions = [
     { label: 'Run', value: 'Run' },
@@ -93,11 +101,44 @@ const downloadBlob = (blob: Blob, filename: string) => {
     URL.revokeObjectURL(url);
 };
 
+const svgToPngBlob = async (svg: string) => {
+    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl = URL.createObjectURL(svgBlob);
+
+    try {
+        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('Unable to render summary image.'));
+            img.src = svgUrl;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
+
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Unable to prepare PNG canvas.');
+
+        context.drawImage(image, 0, 0);
+
+        return await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob(blob => {
+                if (blob) resolve(blob);
+                else reject(new Error('Unable to export PNG image.'));
+            }, 'image/png');
+        });
+    } finally {
+        URL.revokeObjectURL(svgUrl);
+    }
+};
+
 function buildSummarySvg(
     summaryData: SummaryResponse,
     selectedActivityTypes: string[],
     includeOnlyMileage: boolean,
-    commuteOnly: boolean
+    commuteOnly: boolean,
+    isDarkMode: boolean
 ) {
     const selectedLabels = activityTypeOptions
         .filter(option => selectedActivityTypes.includes(option.value))
@@ -106,41 +147,48 @@ function buildSummarySvg(
     const mileageLabel = includeOnlyMileage ? 'Only activities with mileage' : 'All activities';
     const commuteLabel = commuteOnly ? 'Commutes only' : 'Commutes and non-commutes';
     const rows = summaryData.summary.totalsByType.slice(0, 10);
-    const sectionTop = 308;
+    const sectionTop = 322;
     const columnHeaderY = sectionTop + 24;
     const firstRowY = columnHeaderY + 30;
     const rowHeight = 30;
     const sectionBottom = firstRowY + rows.length * rowHeight + 24;
     const height = Math.max(420, sectionBottom);
-
+    const background = isDarkMode ? BRAND.smokyBlack : BRAND.isabelline;
+    const panel = isDarkMode ? '#141010' : '#ffffff';
+    const panelBorder = isDarkMode ? alpha(BRAND.tangelo, 0.4) : alpha(BRAND.blueMunsell, 0.35);
+    const heading = isDarkMode ? BRAND.isabelline : BRAND.smokyBlack;
+    const accent = isDarkMode ? BRAND.tangelo : BRAND.blueMunsell;
+    const secondary = isDarkMode ? '#c9c9c9' : '#5b5b5b';
+    const rule = isDarkMode ? alpha(BRAND.isabelline, 0.18) : alpha(BRAND.blueMunsell, 0.18);
     const rowMarkup = rows
         .map(
             (row, index) => `
-                <text x="40" y="${firstRowY + index * rowHeight}" font-family="Arial, sans-serif" font-size="15" fill="#3b322c">${xmlEscape(row.type)}</text>
-                <text x="360" y="${firstRowY + index * rowHeight}" text-anchor="end" font-family="Arial, sans-serif" font-size="15" fill="#3b322c">${row.activityCount} activities</text>
-                <text x="580" y="${firstRowY + index * rowHeight}" text-anchor="end" font-family="Arial, sans-serif" font-size="15" fill="#3b322c">${row.totalDistanceMiles.toFixed(2)} mi</text>
+                <text x="40" y="${firstRowY + index * rowHeight}" font-family="Roboto Mono, Arial, sans-serif" font-size="15" fill="${heading}">${xmlEscape(row.type)}</text>
+                <text x="360" y="${firstRowY + index * rowHeight}" text-anchor="end" font-family="Roboto Mono, Arial, sans-serif" font-size="15" fill="${secondary}">${row.activityCount} activities</text>
+                <text x="580" y="${firstRowY + index * rowHeight}" text-anchor="end" font-family="Roboto Mono, Arial, sans-serif" font-size="15" fill="${secondary}">${row.totalDistanceMiles.toFixed(2)} mi</text>
             `
         )
         .join('');
 
     return `
         <svg xmlns="http://www.w3.org/2000/svg" width="640" height="${height}" viewBox="0 0 640 ${height}">
-            <rect width="640" height="${height}" rx="24" fill="#f6efe7" />
-            <rect x="20" y="20" width="600" height="${height - 40}" rx="18" fill="#fffaf4" stroke="#d4b483" stroke-width="2" />
-            <text x="40" y="64" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#6d4c2f">Route Raccoon Summary</text>
-            <text x="40" y="92" font-family="Arial, sans-serif" font-size="16" fill="#7b685a">${xmlEscape(summaryData.startDate)} to ${xmlEscape(summaryData.endDate)}</text>
-            <text x="40" y="118" font-family="Arial, sans-serif" font-size="14" fill="#7b685a">${xmlEscape(filterLabel)}</text>
-            <text x="40" y="138" font-family="Arial, sans-serif" font-size="14" fill="#7b685a">${xmlEscape(mileageLabel)}</text>
-            <text x="40" y="158" font-family="Arial, sans-serif" font-size="14" fill="#7b685a">${xmlEscape(commuteLabel)}</text>
-            <text x="40" y="198" font-family="Arial, sans-serif" font-size="40" font-weight="700" fill="#2c241f">${summaryData.summary.totalDistanceMiles.toFixed(2)} mi</text>
-            <text x="40" y="226" font-family="Arial, sans-serif" font-size="16" fill="#7b685a">${summaryData.summary.activityCount} activities</text>
-            <text x="40" y="248" font-family="Arial, sans-serif" font-size="16" fill="#7b685a">Moving time ${formatDuration(summaryData.summary.totalMovingTimeSeconds)}</text>
-            <line x1="40" y1="270" x2="600" y2="270" stroke="#d9c4aa" stroke-width="1" />
-            <text x="40" y="${sectionTop}" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#6d4c2f">By Strava activity type</text>
-            <text x="40" y="${columnHeaderY}" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#7b685a">TYPE</text>
-            <text x="360" y="${columnHeaderY}" text-anchor="end" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#7b685a">COUNT</text>
-            <text x="580" y="${columnHeaderY}" text-anchor="end" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#7b685a">DISTANCE</text>
-            <line x1="40" y1="${columnHeaderY + 10}" x2="600" y2="${columnHeaderY + 10}" stroke="#d9c4aa" stroke-width="1" />
+            <rect width="640" height="${height}" rx="24" fill="${background}" />
+            <rect x="20" y="20" width="600" height="${height - 40}" rx="18" fill="${panel}" stroke="${panelBorder}" stroke-width="2" />
+            <text x="40" y="68" font-family="Doto, Arial, sans-serif" font-size="36" font-weight="700" fill="${accent}">Route Raccoon</text>
+            <text x="40" y="92" font-family="Roboto Mono, Arial, sans-serif" font-size="15" font-weight="700" fill="${secondary}">SUMMARY SNAPSHOT</text>
+            <text x="40" y="126" font-family="DM Serif Display, Georgia, serif" font-size="30" font-weight="700" fill="${heading}">${xmlEscape(summaryData.startDate)} to ${xmlEscape(summaryData.endDate)}</text>
+            <text x="40" y="154" font-family="Roboto Mono, Arial, sans-serif" font-size="14" fill="${secondary}">${xmlEscape(filterLabel)}</text>
+            <text x="40" y="174" font-family="Roboto Mono, Arial, sans-serif" font-size="14" fill="${secondary}">${xmlEscape(mileageLabel)}</text>
+            <text x="40" y="194" font-family="Roboto Mono, Arial, sans-serif" font-size="14" fill="${secondary}">${xmlEscape(commuteLabel)}</text>
+            <text x="40" y="238" font-family="DM Serif Display, Georgia, serif" font-size="42" font-weight="700" fill="${accent}">${summaryData.summary.totalDistanceMiles.toFixed(2)} mi</text>
+            <text x="40" y="266" font-family="Roboto Mono, Arial, sans-serif" font-size="16" fill="${secondary}">${summaryData.summary.activityCount} activities</text>
+            <text x="40" y="288" font-family="Roboto Mono, Arial, sans-serif" font-size="16" fill="${secondary}">Moving time ${formatDuration(summaryData.summary.totalMovingTimeSeconds)}</text>
+            <line x1="40" y1="300" x2="600" y2="300" stroke="${rule}" stroke-width="1" />
+            <text x="40" y="${sectionTop}" font-family="Roboto Mono, Arial, sans-serif" font-size="18" font-weight="700" fill="${accent}">By sport type</text>
+            <text x="40" y="${columnHeaderY}" font-family="Roboto Mono, Arial, sans-serif" font-size="12" font-weight="700" fill="${secondary}">TYPE</text>
+            <text x="360" y="${columnHeaderY}" text-anchor="end" font-family="Roboto Mono, Arial, sans-serif" font-size="12" font-weight="700" fill="${secondary}">COUNT</text>
+            <text x="580" y="${columnHeaderY}" text-anchor="end" font-family="Roboto Mono, Arial, sans-serif" font-size="12" font-weight="700" fill="${secondary}">DISTANCE</text>
+            <line x1="40" y1="${columnHeaderY + 10}" x2="600" y2="${columnHeaderY + 10}" stroke="${rule}" stroke-width="1" />
             ${rowMarkup}
         </svg>
     `.trim();
@@ -148,6 +196,7 @@ function buildSummarySvg(
 
 export default function ExportPage() {
     const { athleteId, login, clearAuth } = useAthleteAuth();
+    const theme = useTheme();
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
     const [busy, setBusy] = useState(false);
@@ -237,8 +286,9 @@ export default function ExportPage() {
         setImageBusy(true);
         setError(null);
         try {
-            const svg = buildSummarySvg(summaryData, selectedActivityTypes, includeOnlyMileage, commuteOnly);
-            downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `strava_summary_${start}_${end}.svg`);
+            const svg = buildSummarySvg(summaryData, selectedActivityTypes, includeOnlyMileage, commuteOnly, theme.palette.mode === 'dark');
+            const pngBlob = await svgToPngBlob(svg);
+            downloadBlob(pngBlob, `strava_summary_${start}_${end}.png`);
         } catch (e: unknown) {
             setError(`Summary image failed: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
@@ -378,25 +428,67 @@ export default function ExportPage() {
                     </Card>
 
                     {summaryData && (
-                        <Card>
+                        <Card
+                            sx={{
+                                overflow: 'hidden',
+                                background: theme.palette.mode === 'dark'
+                                    ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.16)}, ${alpha(BRAND.smokyBlack, 0.92)})`
+                                    : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.12)}, ${alpha(theme.palette.secondary.main, 0.08)})`,
+                                borderColor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.38 : 0.24),
+                            }}
+                        >
                             <CardContent>
-                                <Stack spacing={2}>
+                                <Stack spacing={2.5}>
                                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between">
                                         <Box>
-                                            <Typography variant="h5">Summary snapshot</Typography>
+                                            <Typography
+                                                variant="overline"
+                                                sx={{ color: 'primary.main', letterSpacing: '0.16em', fontWeight: 700, fontFamily: 'Roboto Mono' }}
+                                            >
+                                                Summary Snapshot
+                                            </Typography>
+                                            <Typography variant="h3" sx={{ fontFamily: 'Doto', fontWeight: 700, color: 'primary.main', lineHeight: 1 }}>
+                                                Route Raccoon
+                                            </Typography>
                                             <Typography variant="body2" color="text.secondary">
                                                 {summaryData.startDate} to {summaryData.endDate}
                                             </Typography>
                                         </Box>
-                                        <Stack direction="row" spacing={1} flexWrap="wrap">
-                                            <Chip label={`${summaryData.summary.activityCount} activities`} color="primary" />
-                                            <Chip label={`${summaryData.summary.totalDistanceMiles.toFixed(2)} miles`} color="secondary" />
-                                            <Chip label={formatDuration(summaryData.summary.totalMovingTimeSeconds)} />
-                                        </Stack>
+                                        <Box
+                                            sx={{
+                                                px: 2.5,
+                                                py: 1.75,
+                                                borderRadius: 3,
+                                                bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.3 : 0.75),
+                                                border: '1px solid',
+                                                borderColor: alpha(theme.palette.primary.main, 0.18),
+                                                minWidth: { sm: 200 },
+                                            }}
+                                        >
+                                            <Typography variant="overline" sx={{ color: 'primary.main', lineHeight: 1.2 }}>
+                                                Total Miles
+                                            </Typography>
+                                            <Typography variant="h4" sx={{ color: 'secondary.main', lineHeight: 1.05 }}>
+                                                {summaryData.summary.totalDistanceMiles.toFixed(2)}
+                                            </Typography>
+                                        </Box>
+                                    </Stack>
+                                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.25} flexWrap="wrap">
+                                        <Chip label={`${summaryData.summary.activityCount} activities`} color="primary" />
+                                        <Chip label={`Moving time ${formatDuration(summaryData.summary.totalMovingTimeSeconds)}`} color="secondary" />
+                                        <Chip
+                                            label={commuteOnly ? 'Commutes only' : 'All commute tags'}
+                                            sx={{
+                                                bgcolor: alpha(theme.palette.info.main, theme.palette.mode === 'dark' ? 0.24 : 0.12),
+                                                color: theme.palette.text.primary,
+                                                border: '1px solid',
+                                                borderColor: alpha(theme.palette.info.main, 0.28),
+                                            }}
+                                        />
                                     </Stack>
                                     <Typography variant="body2" color="text.secondary">
                                         {selectedActivityTypes.length > 0
-                                            ? `Filtered to ${selectedActivityTypes.length} selected Strava activity types.`
+                                            ? `Filtered to ${selectedActivityTypes.length} selected activity types.`
                                             : 'Showing every activity type in the selected date range.'}
                                         {commuteOnly ? ' Commute filter is on.' : ''}
                                     </Typography>
@@ -409,14 +501,17 @@ export default function ExportPage() {
                                                         display: 'flex',
                                                         justifyContent: 'space-between',
                                                         gap: 2,
-                                                        py: 1,
-                                                        borderBottom: '1px solid',
-                                                        borderColor: 'divider',
+                                                        px: 1.5,
+                                                        py: 1.25,
+                                                        borderRadius: 2,
+                                                        bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.24 : 0.7),
+                                                        border: '1px solid',
+                                                        borderColor: alpha(theme.palette.primary.main, 0.12),
                                                         flexWrap: 'wrap',
                                                     }}
                                                 >
-                                                    <Typography fontWeight={600}>{item.type}</Typography>
-                                                    <Typography color="text.secondary">
+                                                    <Typography fontWeight={700} sx={{ color: 'primary.main' }}>{item.type}</Typography>
+                                                    <Typography color="text.secondary" sx={{ fontFamily: 'Roboto Mono, monospace' }}>
                                                         {item.activityCount} activities · {item.totalDistanceMiles.toFixed(2)} miles · {formatDuration(item.totalMovingTimeSeconds)}
                                                     </Typography>
                                                 </Box>

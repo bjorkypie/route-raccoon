@@ -246,8 +246,9 @@ function buildExportSummary(activities: StravaActivity[]): ExportSummary {
   const totals = new Map<string, ExportSummary['totalsByType'][number]>();
 
   for (const activity of activities) {
-    const total = totals.get(activity.type) ?? {
-      type: activity.type,
+    const summaryType = activity.sport_type || activity.type;
+    const total = totals.get(summaryType) ?? {
+      type: summaryType,
       activityCount: 0,
       totalDistanceMiles: 0,
       totalMovingTimeSeconds: 0,
@@ -255,7 +256,7 @@ function buildExportSummary(activities: StravaActivity[]): ExportSummary {
     total.activityCount += 1;
     total.totalDistanceMiles += milesFromMeters(activity.distance);
     total.totalMovingTimeSeconds += activity.moving_time;
-    totals.set(activity.type, total);
+    totals.set(summaryType, total);
   }
 
   const totalDistanceMiles = Number(
