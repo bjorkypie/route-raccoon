@@ -92,7 +92,7 @@ function App() {
         <Container maxWidth="xl" sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
         <img src="/api_logo_pwrdBy_strava_horiz_white.png" alt="Powered by Strava" style={{ width: 300, marginLeft: 10 }}/>
           <Typography variant="body2" color="inherit" align="right">
-            &copy; {currentYear} by <a href="https://madelinehassett.com" style={{color: 'inherit', textDecoration: 'underline'}}>Madeline H</a> 🦝  <a href="/privacy" style={{color: 'inherit', textDecoration: 'underline'}}>Privacy</a> · Source code on{' '}
+            &copy; {currentYear} by Madeline H 🦝  <a href="/privacy" style={{color: 'inherit', textDecoration: 'underline'}}>Privacy</a> · Source code on{' '}
             <a href="https://github.com/bjorkypie/" style={{color: 'inherit', textDecoration: 'underline'}}>GitHub</a>.
           </Typography>
         </Container>
