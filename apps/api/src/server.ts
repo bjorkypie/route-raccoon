@@ -26,7 +26,6 @@ type StravaActivity = {
   name: string;
   type: string;
   sport_type?: string;
-  workout_type?: number | null;
   distance: number;
   moving_time: number;
   start_date: string;
@@ -174,10 +173,7 @@ async function withFreshToken(athleteId: string): Promise<TokenBundle> {
 const csvHeaders = [
   'Activity ID',
   'Comment',
-  'Activity Type',
-  'Strava Type',
   'Sport Type',
-  'Workout Type',
   'Commute',
   'Activity Date',
   'Activity Time',
@@ -185,23 +181,6 @@ const csvHeaders = [
 ] as const;
 
 const milesFromMeters = (meters: number): number => Number((meters * 0.00062137).toFixed(2));
-
-const mapActivityType = (t: string) => {
-  if (t === 'Run' || t === 'VirtualRun') return 'Run';
-  if (
-    t === 'Ride' ||
-    t === 'EBikeRide' ||
-    t === 'VirtualRide' ||
-    t === 'Velomobile' ||
-    t === 'Wheelchair' ||
-    t === 'InlineSkate' ||
-    t === 'RollerSki' ||
-    t === 'Handcycle'
-  ) {
-    return 'Roll';
-  }
-  return 'Walk';
-};
 
 const secondsFormatted = (secs: number): string => {
   const secondsInHour = 3600;
@@ -301,10 +280,7 @@ function buildCsvRows(activities: StravaActivity[], includeTotalsRow = false) {
   const rows = activities.map(activity => ({
     'Activity ID': String(activity.id),
     Comment: activity.name,
-    'Activity Type': mapActivityType(activity.type),
-    'Strava Type': activity.type,
     'Sport Type': activity.sport_type ?? '',
-    'Workout Type': activity.workout_type ?? '',
     Commute: activity.commute ? 'yes' : 'no',
     'Activity Date': dayjs(activity.start_date).format('YYYY-MM-DD'),
     'Activity Time': secondsFormatted(activity.moving_time),
@@ -316,10 +292,7 @@ function buildCsvRows(activities: StravaActivity[], includeTotalsRow = false) {
     rows.push({
       'Activity ID': '',
       Comment: 'TOTAL',
-      'Activity Type': `${summary.activityCount} activities`,
-      'Strava Type': '',
-      'Sport Type': '',
-      'Workout Type': '',
+      'Sport Type': `${summary.activityCount} activities`,
       Commute: '',
       'Activity Date': '',
       'Activity Time': secondsFormatted(summary.totalMovingTimeSeconds),

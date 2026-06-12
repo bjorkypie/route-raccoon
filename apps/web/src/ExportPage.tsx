@@ -106,14 +106,19 @@ function buildSummarySvg(
     const mileageLabel = includeOnlyMileage ? 'Only activities with mileage' : 'All activities';
     const commuteLabel = commuteOnly ? 'Commutes only' : 'Commutes and non-commutes';
     const rows = summaryData.summary.totalsByType.slice(0, 10);
-    const height = 300 + rows.length * 28;
+    const sectionTop = 308;
+    const columnHeaderY = sectionTop + 24;
+    const firstRowY = columnHeaderY + 30;
+    const rowHeight = 30;
+    const sectionBottom = firstRowY + rows.length * rowHeight + 24;
+    const height = Math.max(420, sectionBottom);
 
     const rowMarkup = rows
         .map(
             (row, index) => `
-                <text x="40" y="${214 + index * 28}" font-family="Arial, sans-serif" font-size="15" fill="#3b322c">${xmlEscape(row.type)}</text>
-                <text x="360" y="${214 + index * 28}" text-anchor="end" font-family="Arial, sans-serif" font-size="15" fill="#3b322c">${row.activityCount} activities</text>
-                <text x="580" y="${214 + index * 28}" text-anchor="end" font-family="Arial, sans-serif" font-size="15" fill="#3b322c">${row.totalDistanceMiles.toFixed(2)} mi</text>
+                <text x="40" y="${firstRowY + index * rowHeight}" font-family="Arial, sans-serif" font-size="15" fill="#3b322c">${xmlEscape(row.type)}</text>
+                <text x="360" y="${firstRowY + index * rowHeight}" text-anchor="end" font-family="Arial, sans-serif" font-size="15" fill="#3b322c">${row.activityCount} activities</text>
+                <text x="580" y="${firstRowY + index * rowHeight}" text-anchor="end" font-family="Arial, sans-serif" font-size="15" fill="#3b322c">${row.totalDistanceMiles.toFixed(2)} mi</text>
             `
         )
         .join('');
@@ -131,7 +136,11 @@ function buildSummarySvg(
             <text x="40" y="226" font-family="Arial, sans-serif" font-size="16" fill="#7b685a">${summaryData.summary.activityCount} activities</text>
             <text x="40" y="248" font-family="Arial, sans-serif" font-size="16" fill="#7b685a">Moving time ${formatDuration(summaryData.summary.totalMovingTimeSeconds)}</text>
             <line x1="40" y1="270" x2="600" y2="270" stroke="#d9c4aa" stroke-width="1" />
-            <text x="40" y="300" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#6d4c2f">By Strava activity type</text>
+            <text x="40" y="${sectionTop}" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#6d4c2f">By Strava activity type</text>
+            <text x="40" y="${columnHeaderY}" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#7b685a">TYPE</text>
+            <text x="360" y="${columnHeaderY}" text-anchor="end" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#7b685a">COUNT</text>
+            <text x="580" y="${columnHeaderY}" text-anchor="end" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#7b685a">DISTANCE</text>
+            <line x1="40" y1="${columnHeaderY + 10}" x2="600" y2="${columnHeaderY + 10}" stroke="#d9c4aa" stroke-width="1" />
             ${rowMarkup}
         </svg>
     `.trim();
